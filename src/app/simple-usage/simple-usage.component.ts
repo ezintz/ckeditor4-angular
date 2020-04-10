@@ -1,5 +1,5 @@
 /**
- * @license Copyright (c) 2003-2019, CKSource - Frederico Knabben. All rights reserved.
+ * @license Copyright (c) 2003-2020, CKSource - Frederico Knabben. All rights reserved.
  * For licensing, see LICENSE.md.
  */
 
@@ -18,6 +18,8 @@ export class SimpleUsageComponent {
 		`<p>Getting used to an entirely different culture can be challenging.
 While it’s also nice to learn about cultures online or from books, nothing comes close to experiencing cultural diversity in person.
 You learn to appreciate each and every single one of the differences while you become more culturally fluid.</p>`;
+
+	editors = [ 'Classic', 'Divarea', 'Inline' ];
 
 	isHidden = false;
 

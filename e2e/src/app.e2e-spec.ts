@@ -1,5 +1,5 @@
 /**
- * @license Copyright (c) 2003-2019, CKSource - Frederico Knabben. All rights reserved.
+ * @license Copyright (c) 2003-2020, CKSource - Frederico Knabben. All rights reserved.
  * For licensing, see LICENSE.md.
  */
 
@@ -24,7 +24,7 @@ describe( 'workspace-project App', () => {
 		} );
 
 		it( 'should display welcome message', () => {
-			expect( page.getParagraphText() ).toEqual( 'CKEditor integration with Angular 2+' );
+			expect( page.getParagraphText() ).toEqual( 'CKEditor 4 integration with Angular' );
 		} );
 
 		it( 'should display editor with initial content', async () => {

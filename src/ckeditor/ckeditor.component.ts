@@ -1,5 +1,5 @@
 /**
- * @license Copyright (c) 2003-2019, CKSource - Frederico Knabben. All rights reserved.
+ * @license Copyright (c) 2003-2020, CKSource - Frederico Knabben. All rights reserved.
  * For licensing, see LICENSE.md.
  */
 
@@ -62,7 +62,7 @@ export class CKEditorComponent implements AfterViewInit, OnDestroy, ControlValue
 	 * and https://ckeditor.com/docs/ckeditor4/latest/examples/fixedui.html
 	 * to learn more.
 	 */
-	@Input() type: CKEditor4.EditorType = CKEditor4.EditorType.DIVAREA;
+	@Input() type: CKEditor4.EditorType = CKEditor4.EditorType.CLASSIC;
 
 	/**
 	 * Keeps track of the editor's data.
@@ -115,16 +115,26 @@ export class CKEditorComponent implements AfterViewInit, OnDestroy, ControlValue
 	}
 
 	/**
-	 * Fires when the editing view of the editor is blurred. It corresponds with the `editor#blur`
-	 * https://ckeditor.com/docs/ckeditor4/latest/api/CKEDITOR_editor.html#event-blur
+	 * Fires when the editor is ready. It corresponds with the `editor#instanceReady`
+	 * https://ckeditor.com/docs/ckeditor4/latest/api/CKEDITOR_editor.html#event-instanceReady
 	 * event.
 	 */
-	@Output() blur = new EventEmitter<CKEditor4.EventInfo>();
+	@Output() ready = new EventEmitter<CKEditor4.EventInfo>();
+
+	/**
+	 * Fires when the editor data is loaded, e.g. after calling setData()
+	 * https://ckeditor.com/docs/ckeditor4/latest/api/CKEDITOR_editor.html#method-setData
+	 * editor's method. It corresponds with the `editor#dataReady`
+	 * https://ckeditor.com/docs/ckeditor4/latest/api/CKEDITOR_editor.html#event-dataReady event.
+	 */
+	@Output() dataReady = new EventEmitter<CKEditor4.EventInfo>();
 
 	/**
 	 * Fires when the content of the editor has changed. It corresponds with the `editor#change`
 	 * https://ckeditor.com/docs/ckeditor4/latest/api/CKEDITOR_editor.html#event-change
 	 * event. For performance reasons this event may be called even when data didn't really changed.
+	 * Please note that this event will only be fired when `undo` plugin is loaded. If you need to
+	 * listen for editor changes (e.g. for two-way data binding), use `dataChange` event instead.
 	 */
 	@Output() change = new EventEmitter<CKEditor4.EventInfo>();
 
@@ -184,6 +194,13 @@ export class CKEditorComponent implements AfterViewInit, OnDestroy, ControlValue
 	@Output() focus = new EventEmitter<CKEditor4.EventInfo>();
 
 	/**
+	 * Fires when the editing view of the editor is blurred. It corresponds with the `editor#blur`
+	 * https://ckeditor.com/docs/ckeditor4/latest/api/CKEDITOR_editor.html#event-blur
+	 * event.
+	 */
+	@Output() blur = new EventEmitter<CKEditor4.EventInfo>();
+
+	/**
 	 * Fires after the user initiated a paste action, but before the data is inserted.
 	 * It corresponds with the `editor#paste`
 	 * https://ckeditor.com/docs/ckeditor4/latest/api/CKEDITOR_editor.html#event-paste
@@ -192,21 +209,9 @@ export class CKEditorComponent implements AfterViewInit, OnDestroy, ControlValue
 	@Output() paste = new EventEmitter<CKEditor4.EventInfo>();
 
 	/**
-	 * Fires when the editor is ready. It corresponds with the `editor#instanceReady`
-	 * https://ckeditor.com/docs/ckeditor4/latest/api/CKEDITOR_editor.html#event-instanceReady
-	 * event.
-	 */
-	@Output() ready = new EventEmitter<CKEditor4.EventInfo>();
-
-	/**
 	 * The instance of the editor created by this component.
 	 */
 	instance: any;
-
-	/**
-	 * Wrapper element used to initialize editor.
-	 */
-	wrapper: HTMLElement;
 
 	/**
 	 * If the component is read–only before the editor instance is created, it remembers that state,
@@ -235,11 +240,11 @@ export class CKEditorComponent implements AfterViewInit, OnDestroy, ControlValue
 	/**
 	 * CKEditor 4 script url address. Script will be loaded only if CKEDITOR namespace is missing.
 	 *
-	 * Defaults to 'https://cdn.ckeditor.com/4.11.4/standard-all/ckeditor.js'
+	 * Defaults to 'https://cdn.ckeditor.com/4.14.0/standard-all/ckeditor.js'
 	 */
-	@Input() editorUrl = 'https://cdn.ckeditor.com/4.11.4/standard-all/ckeditor.js';
+	@Input() editorUrl = 'https://cdn.ckeditor.com/4.14.0/standard-all/ckeditor.js';
 
-	constructor( private elementRef: ElementRef<HTMLElement>, private ngZone: NgZone ) {
+	constructor( private elementRef: ElementRef, private ngZone: NgZone ) {
 	}
 
 	ngAfterViewInit(): void {
@@ -270,20 +275,19 @@ export class CKEditorComponent implements AfterViewInit, OnDestroy, ControlValue
 	}
 
 	private createEditor(): void {
-		const element = this.createInitialElement();
+		const element = document.createElement( this.tagName );
+		this.elementRef.nativeElement.appendChild( element );
 
-		this.config = this.ensureDivareaPlugin( this.config || {} );
+		if ( this.type === CKEditor4.EditorType.DIVAREA ) {
+			this.config = this.ensureDivareaPlugin( this.config || {} );
+		}
 
-		const instance = this.type === CKEditor4.EditorType.INLINE
+		const instance: CKEditor4.Editor = this.type === CKEditor4.EditorType.INLINE
 			? CKEDITOR.inline( element, this.config )
 			: CKEDITOR.replace( element, this.config );
 
-		instance.once( 'instanceReady', function( evt ) {
+		instance.once( 'instanceReady', evt => {
 			this.instance = instance;
-
-			this.wrapper.removeAttribute( 'style' );
-
-			this.elementRef.nativeElement.appendChild( this.wrapper );
 
 			// Read only state may change during instance initialization.
 			this.readOnly = this._readOnly !== null ? this._readOnly : this.instance.readOnly;
@@ -294,20 +298,25 @@ export class CKEditorComponent implements AfterViewInit, OnDestroy, ControlValue
 
 			if ( this.data !== null ) {
 				undo && undo.lock();
-				instance.setData( this.data );
 
-				// Locking undoManager prevents 'change' event.
-				// Trigger it manually to updated bound data.
-				if ( this.data !== instance.getData() ) {
-					instance.fire( 'change' );
-				}
-				undo && undo.unlock();
+				instance.setData( this.data, { callback: () => {
+					// Locking undoManager prevents 'change' event.
+					// Trigger it manually to updated bound data.
+					if ( this.data !== instance.getData() ) {
+						undo ? instance.fire( 'change' ) : instance.fire( 'dataReady' );
+					}
+					undo && undo.unlock();
+
+					this.ngZone.run( () => {
+						this.ready.emit( evt );
+					} );
+				} } );
+			} else {
+				this.ngZone.run( () => {
+					this.ready.emit( evt );
+				} );
 			}
-
-			this.ngZone.run( () => {
-				this.ready.emit( evt );
-			} );
-		}, this );
+		} );
 	}
 
 	private subscribe( editor: any ): void {
@@ -363,23 +372,37 @@ export class CKEditorComponent implements AfterViewInit, OnDestroy, ControlValue
 			} );
 		} );
 
-		editor.on( 'change', evt => {
-			this.ngZone.run( () => {
-				const newData = editor.getData();
+		editor.on( 'dataReady', this.propagateChange, this );
 
-				this.change.emit( evt );
+		if ( this.instance.undoManager ) {
+			editor.on( 'change', this.propagateChange, this );
+		}
+		// If 'undo' plugin is not loaded, listen to 'selectionCheck' event instead. (#54).
+		else {
+			editor.on( 'selectionCheck', this.propagateChange, this );
+		}
+	}
 
-				if ( newData === this.data ) {
-					return;
-				}
+	private propagateChange( event: any ): void {
+		this.ngZone.run( () => {
+			const newData = this.instance.getData();
 
-				this._data = newData;
-				this.dataChange.emit( newData );
+			if ( event.name == 'change' ) {
+				this.change.emit( event );
+			} else if ( event.name == 'dataReady' ) {
+				this.dataReady.emit( event );
+			}
 
-				if ( this.onChange ) {
-					this.onChange( newData );
-				}
-			} );
+			if ( newData === this.data ) {
+				return;
+			}
+
+			this._data = newData;
+			this.dataChange.emit( newData );
+
+			if ( this.onChange ) {
+				this.onChange( newData );
+			}
 		} );
 	}
 
@@ -420,18 +443,5 @@ export class CKEditorComponent implements AfterViewInit, OnDestroy, ControlValue
 		}
 
 		return plugins;
-	}
-
-	private createInitialElement(): HTMLElement {
-		// Render editor outside of component so it won't be removed from DOM before `instanceReady`.
-		this.wrapper = document.createElement( 'div' );
-		const element = document.createElement( this.tagName );
-
-		this.wrapper.setAttribute( 'style', 'display:none;' );
-
-		document.body.appendChild( this.wrapper );
-		this.wrapper.appendChild( element );
-
-		return element;
 	}
 }
