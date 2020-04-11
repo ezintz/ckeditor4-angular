@@ -11,7 +11,8 @@ import {
 	EventEmitter,
 	forwardRef,
 	ElementRef,
-	AfterViewInit, OnDestroy
+	AfterViewInit,
+	OnDestroy
 } from '@angular/core';
 
 import {
