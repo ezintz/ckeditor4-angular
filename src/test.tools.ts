@@ -18,6 +18,20 @@ export function whenDataReady( editor: any, callback?: Function ) {
 	} );
 }
 
+export function whenDataPasted( editor: any, skipCancel = false) {
+	return new Promise( res => {
+		editor.once( 'paste', evt => {
+			evt.removeListener();
+
+			if ( !skipCancel ) {
+				evt.cancel(); // Cancel for performance reason - we don't need insertion happen.
+			}
+
+			res();
+		}, null, null, 9999 );
+	} );
+}
+
 export function setDataMultipleTimes( editor: any, data: Array<string> ) {
 	return new Promise( res => {
 		if ( !editor.editable().isInline() ) {
@@ -114,6 +128,73 @@ export function mockPasteEvent() {
 	};
 }
 
+export function mockDropEvent() {
+	var dataTransfer = this.mockNativeDataTransfer();
+	var target = new CKEDITOR.dom.text( 'targetMock' );
+
+	target.isReadOnly = function() {
+		return false;
+	};
+
+	return {
+		$: {
+			dataTransfer: dataTransfer
+		},
+		preventDefault: function() {
+			// noop
+		},
+		getTarget: function() {
+			return target;
+		},
+		setTarget: function( t ) {
+			target = t;
+		}
+	};
+}
+
+export function fireDragStartEvent( editor: any, evt: any, widgetOrNode: any ) {
+	const dropTarget = CKEDITOR.plugins.clipboard.getDropTarget( editor );
+	const dragTarget = getDragEventTarget( widgetOrNode );
+
+	// Use realistic target which is the drag handler or the element.
+	evt.setTarget( dragTarget );
+
+	dropTarget.fire( 'dragstart', evt );
+}
+
+export function getWidgetById( editor: any, id: string, byElement = false ) {
+	var widget = editor.widgets.getByElement( editor.document.getById( id ) );
+
+	if ( widget && byElement ) {
+		return widget.element.$.id == id ? widget : null;
+	}
+
+	return widget;
+}
+
+export function fireDropEvent( editor: any, evt: any, dropRange: any ) {
+	const dropTarget = CKEDITOR.env.ie && CKEDITOR.env.version < 9 ? editor.editable() : editor.document;
+
+	// If drop range is known use a realistic target. If no, then use a mock.
+	if ( dropRange ) {
+		evt.setTarget( dropRange.startContainer );
+	} else {
+		evt.setTarget( new CKEDITOR.dom.text( 'targetMock' ) );
+	}
+
+	dropTarget.fire( 'drop', evt );
+}
+
+export function fireDragEndEvent( editor: any, evt: any, widgetOrNode: any ) {
+	const dropTarget = CKEDITOR.env.ie && CKEDITOR.env.version < 9 ? editor.editable() : editor.document;
+	const dragTarget = getDragEventTarget( widgetOrNode );
+
+	// Use realistic target which is the drag handler or the element.
+	evt.setTarget( dragTarget );
+
+	dropTarget.fire( 'dragend', evt );
+}
+
 function setDataHelper( editor: any, data: Array<string>, done: Function ) {
 	if ( data.length ) {
 		const content: string = data.shift();
@@ -125,4 +206,12 @@ function setDataHelper( editor: any, data: Array<string>, done: Function ) {
 	} else {
 		setTimeout( done, 100 );
 	}
+}
+
+function getDragEventTarget( widgetOrNode ) {
+	if ( !widgetOrNode.dragHandlerContainer ) {
+		return widgetOrNode;
+	}
+
+	return widgetOrNode.dragHandlerContainer.findOne( 'img' );
 }
